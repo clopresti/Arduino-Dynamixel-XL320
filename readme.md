@@ -4,6 +4,8 @@ This Arduino library can control Dynamixel XL-320 servos using
 a Half-Duplex SoftwareSerial interface. No other hardware or 
 circuitry is needed besides an Arduino board and one or more XL-320 servos.
 
+![XL-320 Servo](/images/xl320-servo.png)
+
 ## Installation
 To use this libary install the Dynamixel-XL320.zip archive from github releases to the 
 Arduino library folder.
@@ -46,6 +48,7 @@ You can use the XL320-Setup sketch included in the examples to configure the bua
 
 ## Testing an XL-320 Servo
 You can use the XL320-Test sketch included in the examples to test an XL-320 servo. The sketch will ping all devices on the bus and print the device ID, Model, and Firmware version to the hardware serial port which you can view using the Arduino serial monitor. After pinging for devices, the sketch will cycle through several LED color changes on all the connected servos.
+
 
 ### Using The XL320-Test Sketch
 ```
