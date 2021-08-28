@@ -28,6 +28,8 @@ After a few seconds the XL-320 servo should reboot and
   the LED on the XL-320 should turn green to indicate success.
 */
 
+#define HwSerial Serial
+
 uint16_t update_crc(uint16_t crc_accum, unsigned char *data_blk_ptr, unsigned short data_blk_size);
 
 const uint8_t INST_WRITE = 0x03;
@@ -89,31 +91,31 @@ void setup()
     int32_t baudrates[] = {9600, 57600, 115200, 1000000};
     for (int i = 0; i <= 3; i++)
     {   //cycle through all baud rates
-        Serial.begin(baudrates[i]);
+        HwSerial.begin(baudrates[i]);
         uint8_t buffer[] = {0xFF, 0xFF, 0xFD, 0x00, BROADCAST_ID, 0x06, 0x00, INST_WRITE, ADDR_BAUD_RATE, 0x00, new_baud, 0x00, 0x00};
         uint16_t crc = update_crc(0, buffer, 11);
         buffer[11] = (crc & 0x00FF);
         buffer[12] = (crc >> 8) & 0x00FF;
-        Serial.write((uint8_t)0);
-        Serial.write(buffer, 13);
+        HwSerial.write((uint8_t)0);
+        HwSerial.write(buffer, 13);
         delay(100);
-        Serial.end();
+        HwSerial.end();
     }
 
-    Serial.begin(baudrates[new_baud]);
+    HwSerial.begin(baudrates[new_baud]);
 
     {   //set new id
         uint8_t buffer[] = {0xFF, 0xFF, 0xFD, 0x00, BROADCAST_ID, 0x06, 0x00, INST_WRITE, ADDR_ID, 0x00, new_id, 0x00, 0x00};
         uint16_t crc = update_crc(0, buffer, 11);
         buffer[11] = (crc & 0x00FF);
         buffer[12] = (crc >> 8) & 0x00FF;
-        Serial.write((uint8_t)0);
-        Serial.write(buffer, 13);
+        HwSerial.write((uint8_t)0);
+        HwSerial.write(buffer, 13);
         delay(100);
-        Serial.end();
+        HwSerial.end();
     }
 
-    Serial.begin(baudrates[new_baud]);
+    HwSerial.begin(baudrates[new_baud]);
 
     if (factory_reset)
     {
@@ -122,8 +124,8 @@ void setup()
         uint16_t crc = update_crc(0, buffer, 9);
         buffer[9] = (crc & 0x00FF);
         buffer[10] = (crc >> 8) & 0x00FF;
-        Serial.write((uint8_t)0);
-        Serial.write(buffer, 11);
+        HwSerial.write((uint8_t)0);
+        HwSerial.write(buffer, 11);
     }
     else
     {
@@ -132,17 +134,17 @@ void setup()
         uint16_t crc = update_crc(0, buffer, 8);
         buffer[8] = (crc & 0x00FF);
         buffer[9] = (crc >> 8) & 0x00FF;
-        Serial.write((uint8_t)0);
-        Serial.write(buffer, 10);
+        HwSerial.write((uint8_t)0);
+        HwSerial.write(buffer, 10);
     }
 
     delay(100);
-    Serial.end();
+    HwSerial.end();
 
     //device will reboot
     delay(1000);
 
-    Serial.begin(baudrates[new_baud]);
+    HwSerial.begin(baudrates[new_baud]);
 
     if (!factory_reset || new_mode != Mode::JOINT)
     {
@@ -151,8 +153,8 @@ void setup()
         uint16_t crc = update_crc(0, buffer, 11);
         buffer[11] = (crc & 0x00FF);
         buffer[12] = (crc >> 8) & 0x00FF;
-        Serial.write((uint8_t)0);
-        Serial.write(buffer, 13);
+        HwSerial.write((uint8_t)0);
+        HwSerial.write(buffer, 13);
     }
 
     //set led to green to indicate success
@@ -160,8 +162,8 @@ void setup()
     uint16_t crc = update_crc(0, buffer, 11);
     buffer[11] = (crc & 0x00FF);
     buffer[12] = (crc >> 8) & 0x00FF;
-    Serial.write((uint8_t)0);
-    Serial.write(buffer, 13);
+    HwSerial.write((uint8_t)0);
+    HwSerial.write(buffer, 13);
 }
 
 void loop()

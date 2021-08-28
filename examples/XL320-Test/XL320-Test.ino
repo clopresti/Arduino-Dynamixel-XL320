@@ -11,8 +11,41 @@ Better option: Power the Arduino from DC power jack (7-8V).
 Best option: Power the XL-320 directly from external power source (7-8V) and connect common grounds.
 */
 
+#define MAX_DEVICES 16
+
+typedef struct {
+    uint8_t id;
+    uint16_t model;
+    uint8_t fwVersion;
+} DeviceInfo;
+
+//Make sure the pins you use support change interrupts for SoftwareSerial
+//Refer to: https://www.arduino.cc/en/Reference/SoftwareSerial
 //Using pins 2 and 3 (Arduino Uno) to connect to XL-320 data wire.
 DynamixelXL320 xl320(2, 3);
+
+//Number of devices
+int deviceCount = 0;
+
+//Info for each device
+DeviceInfo deviceInfo[MAX_DEVICES];
+
+//Print info for each device
+void printDevices() {
+    char msg[60];
+    for (int i = 0; i < deviceCount; i++) {
+        DeviceInfo& d = deviceInfo[i];
+        sprintf(msg, "Device id: %d, model: %d, firmware: %d", d.id, d.model, d.fwVersion);
+        Serial.println(msg);
+    }
+}
+
+//Store info for each device found on the bus
+void pingCallback(uint8_t id, uint16_t model, uint8_t fwVersion) {
+    if (deviceCount < MAX_DEVICES) {
+        deviceInfo[deviceCount++] = { id, model, fwVersion };
+    }
+}
 
 //Display any error code or alert condition reported by the XL-320
 void errorCallback(uint8_t id, uint8_t error, bool alert)
@@ -32,17 +65,10 @@ void errorCallback(uint8_t id, uint8_t error, bool alert)
     xl320.clearError(id);
 }
 
-//Callback to display ID, Model, and Firmware Version for all XL-320 devices on the bus
-void pingCallback(uint8_t id, uint16_t model, uint8_t fwVersion)
-{
-    char msg[60];
-    sprintf(msg, "Device id: %d, model: %d, firmware: %d", id, model, fwVersion);
-    Serial.println(msg);
-}
-
 void setup()
 {
     Serial.begin(9600);
+    while (!Serial) { };
 
     //set error/alert callback handler
     xl320.setErrorCallback(errorCallback);
@@ -52,11 +78,9 @@ void setup()
     //from factory default of 1,000,000
     xl320.begin(DynamixelXL320::Baud::BAUD_57600);
 
-    delay(100);
-
-    // discover all devices on the bus
+    //ping/discover all connected devices
     if (xl320.ping(pingCallback)) {
-        Serial.println("Ping Complete");
+        printDevices();
     } else {
         Serial.println("Ping Failed");
     }

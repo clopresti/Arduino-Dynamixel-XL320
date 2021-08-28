@@ -1,4 +1,29 @@
-#include <Dynamixel-XL320.h>
+#include "Dynamixel-XL320.h"
+
+
+#define MODE_SEND 1
+#define MODE_RECEIVE 0
+
+#define VALUE_8_BIT 1
+#define VALUE_16_BIT 2
+
+#define INST_PING ((uint8_t)0x01)
+#define INST_READ ((uint8_t)0x02)
+#define INST_WRITE ((uint8_t)0x03)
+
+#define ADDR_CONTROL_MODE ((uint8_t)0x0B)
+#define ADDR_MAX_TORQUE ((uint8_t)0x0F)
+#define ADDR_TORQUE_ENABLE ((uint8_t)0x18)
+#define ADDR_LED ((uint8_t)0x19)
+#define ADDR_GOAL_POSITION ((uint8_t)0x1E)
+#define ADDR_GOAL_SPEED ((uint8_t)0x20)
+#define ADDR_CURRENT_POSITION ((uint8_t)0x25)
+#define ADDR_CURRENT_SPEED ((uint8_t)0x27)
+#define ADDR_CURRENT_LOAD ((uint8_t)0x29)
+#define ADDR_CURRENT_VOLTAGE ((uint8_t)0x2D)
+#define ADDR_CURRENT_TEMPERATURE ((uint8_t)0x2E)
+#define ADDR_MOVING ((uint8_t)0x31)
+#define ADDR_ERROR_STATUS ((uint8_t)0x32)
 
 
 DynamixelXL320::DynamixelXL320(uint8_t rxPin, uint8_t txPin)
@@ -7,9 +32,9 @@ DynamixelXL320::DynamixelXL320(uint8_t rxPin, uint8_t txPin)
     memset(_errors, 0, sizeof(_errors));
 }
 
-void DynamixelXL320::begin(Baud baud)
+void DynamixelXL320::begin(Baud baud, uint8_t timeout)
 {
-    _serial.setTimeout(500);
+    _serial.setTimeout(timeout);
     _serial.begin(baud == BAUD_115200 ? 115200 : baud == BAUD_57600 ? 57600 : 9600);
 }
 
@@ -18,15 +43,15 @@ void DynamixelXL320::setErrorCallback(ErrorCallback errorCallback) {
 }
 
 uint8_t DynamixelXL320::getError(uint8_t id) {
-    return (id < 253 ? _errors[id] & 0x7F : 0x00);
+    return (id < sizeof(_errors) ? _errors[id] & 0x7F : 0x00);
 }
 
 void DynamixelXL320::clearError(uint8_t id) {
-    if (id < 253) _errors[id] = 0;
+    if (id < sizeof(_errors)) _errors[id] = 0;
 }
 
 bool DynamixelXL320::getAlert(uint8_t id) {
-    return (id < 253 ? (_errors[id] & 0x80) > 0 : false);
+    return (id < sizeof(_errors) ? (_errors[id] & 0x80) > 0 : false);
 }
 
 uint8_t DynamixelXL320::getAlertCode(uint8_t id) {
@@ -157,10 +182,12 @@ uint8_t DynamixelXL320::getCurrentTemperature(uint8_t id)
     return (readValue(id, ADDR_CURRENT_TEMPERATURE, VALUE_8_BIT, &value) ? (uint8_t)value : 0x00);
 }  
 
+//Private Members
 
 bool DynamixelXL320::sendPacket(uint8_t* buffer, uint16_t size)
 {
-    if (!buffer || size < 10) return false;
+    if (!buffer || size < 10)
+      return false;
     uint16_t crc = update_crc(0, buffer, size - 2);
     buffer[size-2] = (crc & 0x00FF);
     buffer[size-1] = (crc >> 8) & 0x00FF;
@@ -175,43 +202,64 @@ bool DynamixelXL320::sendPacket(uint8_t* buffer, uint16_t size)
     return _serial.write(buffer, size) == size;
 }
 
-uint16_t DynamixelXL320::readPacket(uint8_t* buffer, uint16_t size, bool processErrors)
+bool DynamixelXL320::readPacket(uint8_t* buffer, uint16_t size, bool processErrors)
 {
-    if (!buffer || size < 11) return 0;
+    if (!buffer || size < 11)
+      return false;
     if (_mode != MODE_RECEIVE) {
         //switch to rx mode
         _serial.disableTx();
         _serial.listen();
         _mode = MODE_RECEIVE;
     }
-    if (_serial.readBytes(buffer, 1) != 1 || buffer[0] != 0xFF) return 0;
-    if (_serial.readBytes(buffer+1, 1) != 1 || buffer[1] != 0xFF) return 0;
-    if (_serial.readBytes(buffer+2, 1) != 1 || buffer[2] != 0xFD) return 0;
-    if (_serial.readBytes(buffer+3, 4) != 4) return 0;
-    uint16_t length = buffer[5] + (buffer[6] << 8);
-    if (length < 4 || length + 7 > size) return 0;
-    if (_serial.readBytes(buffer+7, length) != length || buffer[7] != 0x55) return 0;
-    if (processErrors) {
-        uint8_t id = buffer[4]; if (id < 253) _errors[id] = buffer[8];
+    int idx = 0, length = 0, id = -1;
+    while (idx < size && _serial.readBytes(buffer+idx, 1) == 1) {
+      if (idx < 4) {
+        if ((buffer[idx] == 0xFF) && ((idx == 0) || (idx == 1 && buffer[0] == 0xFF))) {
+        } else if (buffer[idx] == 0xFD && idx == 2) {
+        } else if (buffer[idx] == 0x00 && idx == 3) {
+        } else {
+          buffer[0] = buffer[idx];
+          idx = 0;
+        }
+      } else {
+        if ((idx == 4) && ((id = buffer[4]) > 252)) {
+          return false;
+        } else if (idx == 5) {
+          length = buffer[5];
+        } else if (idx == 6) {
+          length = length + (buffer[6] << 8);
+          if (length + 7 != size)
+            return false;
+        } else if (idx == 7 && buffer[7] != 0x55) {
+          return false;
+        } else if (idx == 8 && processErrors && id > 0 && id < sizeof(_errors)) {
+          _errors[id] = buffer[8];
+        }
+      }
+      idx++;
     }
     //TODO: check CRC
-    return length + 7;
+    return idx == size;
 }
 
 bool DynamixelXL320::sendAndRead(uint8_t id, uint8_t* buffer, uint16_t send_size, uint16_t read_size, bool processErrors, PacketCallback cb, void* cbState)
 {
-    if (!sendPacket(buffer, send_size)) return false;
+    if (!sendPacket(buffer, send_size))
+      return false;
     if (read_size > 0) {
-        if (readPacket(buffer, read_size, processErrors) != read_size) return false;
+        if (!readPacket(buffer, read_size, processErrors))
+          return false;
         if (cb) cb(buffer, read_size, cbState);
         if (id != BROADCAST && buffer[4] != id) return false;
         if (id == BROADCAST) {
-            while (_serial.available() && readPacket(buffer, read_size, processErrors) == read_size) {
+            while (readPacket(buffer, read_size, processErrors)) {
                 if (cb) cb(buffer, read_size, cbState);
             };
         }
     }
-    if (processErrors) checkErrors();
+    if (processErrors)
+      checkErrors();
     return true;
 }
 
@@ -219,14 +267,14 @@ bool DynamixelXL320::writeValue(uint8_t id, uint8_t address, uint8_t nbytes, uin
 {
     if ((id > 252 && id != BROADCAST) || (nbytes < 1 || nbytes > 2)) return false;
     uint8_t buffer[] = { 0xFF, 0xFF, 0xFD, 0x00, id, (uint8_t)(nbytes > 1 ? 0x07 : 0x06), 0x00, INST_WRITE, address, 0x00, (uint8_t)(value & 0x00FF), (uint8_t)(value >> 8), 0x00, 0x00 };
-    return sendAndRead(id, buffer, nbytes > 1 ? 14 : 13, readStatus ? 11 : 0, true, cb, cbState);
+    return sendAndRead(id, buffer, nbytes > 1 ? 14 : 13, (readStatus && id != BROADCAST ? 11 : 0), true, cb, cbState);
 }
 
 bool DynamixelXL320::readValue(uint8_t id, uint8_t address, uint8_t nbytes, uint16_t* value, bool processErrors)
 {
     if (id > 252 || nbytes < 1 || nbytes > 2) return false;
     uint8_t buffer[] = { 0xFF, 0xFF, 0xFD, 0x00, id, 0x07, 0x00, INST_READ, address, 0x00, nbytes, 0x00, 0x00, 0x00 };
-    if (!sendAndRead(id, buffer, sizeof(buffer), nbytes > 1 ? 13 : 12, processErrors)) return false;
+    if (!sendAndRead(id, buffer, 14, nbytes > 1 ? 13 : 12, processErrors)) return false;
     *value = nbytes > 1 ? buffer[9] + (buffer[10] << 8) : buffer[9];
     return true;
 }
@@ -234,12 +282,12 @@ bool DynamixelXL320::readValue(uint8_t id, uint8_t address, uint8_t nbytes, uint
 void DynamixelXL320::checkErrors()
 {
     if (!_errorCallback) return;
-    for (uint8_t i = 0; i < 253; i++) {
+    for (uint8_t i = 0; i < sizeof(_errors); i++) {
         if (_errors[i] != 0) {
             _errorCallback(i, _errors[i] & 0x7F, (_errors[i] & 0x80) > 0);
         }
     }
-}  
+}
 
 //update_crc function from robotis documentation
 uint16_t DynamixelXL320::update_crc(uint16_t crc_accum, unsigned char *data_blk_ptr, unsigned short data_blk_size)
