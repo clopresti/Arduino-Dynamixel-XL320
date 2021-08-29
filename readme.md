@@ -6,6 +6,11 @@ circuitry is needed besides an Arduino board and one or more XL-320 servos.
 
 ![XL-320 Servo](/images/xl320-servo.png)
 
+Links
+- https://emanual.robotis.com/docs/en/dxl/x/xl320/
+- https://emanual.robotis.com/docs/en/dxl/protocol2/
+
+
 ## Installation
 To use this libary install the Dynamixel-XL320.zip archive from github releases to the 
 Arduino library folder.
